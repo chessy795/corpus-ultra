@@ -4111,9 +4111,10 @@ Examples:
     # Generate index.html (Fix 5)
     generate_index_html(args.output)
 
-    # ── ReportBuilder: lean HTML report with grounded interpretation ──
+    # ── ReportBuilder: comprehensive corpus analysis report ──
     if HAS_REPORT:
         try:
+            import plotly.express as px
             rb = ReportBuilder(
                 "Corpus Linguistics ULTRA",
                 dataset=str(args.corpus),
@@ -4121,33 +4122,79 @@ Examples:
                 elapsed_sec=round(time.time() - _t_start, 2),
             )
 
-            # Key findings
+            # --- KEY FINDINGS ---
             findings = []
-            if "readability.csv" in os.listdir(args.output):
-                rdf = pd.read_csv(os.path.join(args.output, "readability.csv"))
-                if "FK Grade" in rdf.columns:
-                    findings.append(f"Readability: mean FK Grade = {rdf['FK Grade'].mean():.1f} (grade level)")
-            if "lexical_richness.csv" in os.listdir(args.output):
-                ldf = pd.read_csv(os.path.join(args.output, "lexical_richness.csv"))
-                if "mtld" in ldf.columns:
-                    findings.append(f"Lexical diversity: mean MTLD = {ldf['mtld'].mean():.1f}")
-            findings.append(f"Processed {len(df)} documents")
-            rb.add_key_findings(findings[:5])
-
-            # Rationale
-            sections_run = [k for k, v in results.items() if v is not None] if 'results' in dir() else []
-            rb.add_rationale("Analysis Scope", f"Sections run: {', '.join(sections_run) if sections_run else 'see output files'}")
-
-            # Metrics
-            if "readability.csv" in os.listdir(args.output):
-                rdf = pd.read_csv(os.path.join(args.output, "readability.csv"))
+            read_path = os.path.join(args.output, "readability.csv")
+            lex_path = os.path.join(args.output, "lexical_richness.csv")
+            if os.path.exists(read_path):
+                rdf = pd.read_csv(read_path)
                 for col in ["FK Grade", "FOG", "SMOG"]:
                     if col in rdf.columns:
-                        val = rdf[col].mean()
-                        rb.add_metric(col, val)
+                        findings.append(f"Readability: mean {col} = {rdf[col].mean():.1f}")
+            if os.path.exists(lex_path):
+                ldf = pd.read_csv(lex_path)
+                if "mtld" in ldf.columns:
+                    findings.append(f"Lexical diversity: mean MTLD = {ldf['mtld'].mean():.1f} ({'rich' if ldf['mtld'].mean()>50 else 'moderate'})")
+                if "yules_k" in ldf.columns:
+                    findings.append(f"Vocabulary: Yule's K = {ldf['yules_k'].mean():.0f} ({'diverse' if ldf['yules_k'].mean()<100 else 'moderate'})")
+            findings.append(f"Corpus: {len(df)} documents, mean length = {df['text'].str.len().mean():.0f} chars")
+            rb.add_key_findings(findings[:7])
 
-            # Build
+            # --- METRICS ---
+            if os.path.exists(read_path):
+                rdf = pd.read_csv(read_path)
+                for col in ["FK Grade", "FOG", "SMOG"]:
+                    if col in rdf.columns:
+                        rb.add_metric(col, rdf[col].mean())
+            if os.path.exists(lex_path):
+                ldf = pd.read_csv(lex_path)
+                if "mtld" in ldf.columns:
+                    rb.add_metric("MTLD", ldf["mtld"].mean(), thresholds=THRESHOLDS.get("mtld"))
+                if "yules_k" in ldf.columns:
+                    rb.add_metric("Yule's K", ldf["yules_k"].mean(), thresholds=THRESHOLDS.get("yules_k"))
+
+            # --- CHARTS ---
+            if os.path.exists(read_path):
+                rdf = pd.read_csv(read_path)
+                if "FK Grade" in rdf.columns:
+                    fig = px.histogram(x=rdf["FK Grade"], nbins=20,
+                        labels={"x": "FK Grade Level", "y": "Count"},
+                        title="Readability Distribution",
+                        color_discrete_sequence=["#6366f1"])
+                    rb.add_chart(fig, title="FK Grade Distribution")
+                if "FRE" in rdf.columns:
+                    fig2 = px.histogram(x=rdf["FRE"], nbins=20,
+                        labels={"x": "Flesch Reading Ease", "y": "Count"},
+                        title="Reading Ease Distribution",
+                        color_discrete_sequence=["#10b981"])
+                    rb.add_chart(fig2, title="Flesch Reading Ease Distribution")
+
+            if os.path.exists(lex_path):
+                ldf = pd.read_csv(lex_path)
+                if "mtld" in ldf.columns and "yules_k" in ldf.columns:
+                    fig3 = px.scatter(x=ldf["mtld"], y=ldf["yules_k"],
+                        labels={"x": "MTLD", "y": "Yule's K"},
+                        title="Lexical Richness: MTLD vs Yule's K",
+                        color_discrete_sequence=["#f59e0b"])
+                    rb.add_chart(fig3, title="Lexical Richness")
+
+            # --- TABLES ---
+            if os.path.exists(read_path):
+                rdf = pd.read_csv(read_path)
+                numeric_cols = [c for c in ["FK Grade", "FRE", "FOG", "SMOG", "Coleman-Liau", "ARI"] if c in rdf.columns]
+                if numeric_cols:
+                    summary = rdf[numeric_cols].describe().round(2).reset_index()
+                    rb.add_table(summary, title="Readability Summary Statistics")
+
+            if os.path.exists(lex_path):
+                ldf = pd.read_csv(lex_path)
+                lex_cols = [c for c in ["mtld", "hdd", "ttr", "yules_k", "herdan_c", "guiraud"] if c in ldf.columns]
+                if lex_cols:
+                    summary2 = ldf[lex_cols].describe().round(4).reset_index()
+                    rb.add_table(summary2, title="Lexical Richness Summary Statistics")
+
             rb.build(os.path.join(args.output, "report.html"))
+            rb.build_csv(os.path.join(args.output, "raw_output.csv"))
         except Exception as e:
             print(f"  [!] ReportBuilder error: {e}")
 
