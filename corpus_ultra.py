@@ -73,6 +73,12 @@ try:
 except ImportError:
     HAS_SCHEMA = False
 
+try:
+    from ultra_shared.report import ReportBuilder, THRESHOLDS
+    HAS_REPORT = True
+except ImportError:
+    HAS_REPORT = False
+
 from ultra_shared.data import load_documents as load_corpus
 from ultra_shared.stats import log_likelihood
 
@@ -4104,6 +4110,46 @@ Examples:
 
     # Generate index.html (Fix 5)
     generate_index_html(args.output)
+
+    # ── ReportBuilder: lean HTML report with grounded interpretation ──
+    if HAS_REPORT:
+        try:
+            rb = ReportBuilder(
+                "Corpus Linguistics ULTRA",
+                dataset=str(args.corpus),
+                n_docs=len(df),
+                elapsed_sec=round(time.time() - _t_start, 2),
+            )
+
+            # Key findings
+            findings = []
+            if "readability.csv" in os.listdir(args.output):
+                rdf = pd.read_csv(os.path.join(args.output, "readability.csv"))
+                if "FK Grade" in rdf.columns:
+                    findings.append(f"Readability: mean FK Grade = {rdf['FK Grade'].mean():.1f} (grade level)")
+            if "lexical_richness.csv" in os.listdir(args.output):
+                ldf = pd.read_csv(os.path.join(args.output, "lexical_richness.csv"))
+                if "mtld" in ldf.columns:
+                    findings.append(f"Lexical diversity: mean MTLD = {ldf['mtld'].mean():.1f}")
+            findings.append(f"Processed {len(df)} documents")
+            rb.add_key_findings(findings[:5])
+
+            # Rationale
+            sections_run = [k for k, v in results.items() if v is not None] if 'results' in dir() else []
+            rb.add_rationale("Analysis Scope", f"Sections run: {', '.join(sections_run) if sections_run else 'see output files'}")
+
+            # Metrics
+            if "readability.csv" in os.listdir(args.output):
+                rdf = pd.read_csv(os.path.join(args.output, "readability.csv"))
+                for col in ["FK Grade", "FOG", "SMOG"]:
+                    if col in rdf.columns:
+                        val = rdf[col].mean()
+                        rb.add_metric(col, val)
+
+            # Build
+            rb.build(os.path.join(args.output, "report.html"))
+        except Exception as e:
+            print(f"  [!] ReportBuilder error: {e}")
 
     # Summary
     print(f"\n{'='*60}")
