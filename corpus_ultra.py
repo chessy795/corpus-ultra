@@ -73,6 +73,9 @@ try:
 except ImportError:
     HAS_SCHEMA = False
 
+from ultra_shared.data import load_documents as load_corpus
+from ultra_shared.stats import log_likelihood
+
 
 # ─── Optional imports with graceful fallback ───────────────────────────────────
 try:
@@ -162,36 +165,6 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 1: CORPUS LOADING & PREPROCESSING
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def load_corpus(path: str, text_col: str, group_col: str = None,
-                encoding: str = "utf-8") -> pd.DataFrame:
-    """Load CSV/TXT corpus into DataFrame."""
-    p = Path(path)
-    if p.suffix.lower() == ".csv":
-        df = pd.read_csv(path, encoding=encoding)
-    elif p.suffix.lower() == ".tsv":
-        df = pd.read_csv(path, sep="\t", encoding=encoding)
-    elif p.suffix.lower() == ".txt":
-        with open(path, "r", encoding=encoding) as f:
-            lines = [l.strip() for l in f if l.strip()]
-        df = pd.DataFrame({"text": lines})
-        text_col = "text"
-    else:
-        raise ValueError(f"Unsupported file format: {p.suffix}")
-
-    if text_col not in df.columns:
-        raise ValueError(f"Column '{text_col}' not found. Available: {list(df.columns)}")
-
-    df = df.dropna(subset=[text_col]).reset_index(drop=True)
-    df["text"] = df[text_col].astype(str)
-
-    if group_col and group_col in df.columns:
-        df["group"] = df[group_col].astype(str)
-    else:
-        df["group"] = "all"
-
-    return df
-
 
 CONTRACTIONS = {
     "don t": "do not", "doesn t": "does not", "didn t": "did not",
@@ -323,24 +296,6 @@ def run_kwic(df, node_word, window=5, sort_by="right", output_dir="output"):
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 3: COLLOCATION EXTRACTION
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def log_likelihood(n_ii, n_ix, n_xi, n_xx):
-    """Log-likelihood ratio (Dunning 1993)."""
-    n_oi = n_xi - n_ii
-    n_io = n_ix - n_ii
-    n_oo = n_xx - n_ii - n_oi - n_io
-    cont = [n_ii, n_oi, n_io, n_oo]
-    n_all = sum(cont)
-    if n_all == 0:
-        return 0.0
-    small = 1e-20
-    g2 = 0.0
-    for i in range(4):
-        e_i = (cont[i] + cont[i ^ 1]) * (cont[i] + cont[i ^ 2]) / n_all
-        if e_i > 0 and cont[i] > 0:
-            g2 += cont[i] * math.log(cont[i] / e_i + small)
-    return 2 * g2
-
 
 def pmi_score(n_ii, n_ix, n_xi, n_xx):
     """Pointwise Mutual Information."""
