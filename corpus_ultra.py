@@ -1339,10 +1339,12 @@ def run_pos_analysis(df, output_dir="output"):
     print(f"  {'Measure':<25} {'Mean':>8} {'Std':>8}")
     print(f"  {'-'*25} {'-'*8} {'-'*8}")
     for col in lex_cols:
+        if col not in lexsoph_df.columns:
+            continue
         vals = lexsoph_df[col].dropna()
         if len(vals) > 0:
             print(f"  {col:<25} {vals.mean():>8.2f} {vals.std():>8.2f}")
-    mean_awl = lexsoph_df["awl_type_pct"].mean()
+    mean_awl = lexsoph_df["awl_type_pct"].mean() if "awl_type_pct" in lexsoph_df.columns else 0
     if mean_awl > 15:
         print(f"    → High academic vocabulary ({mean_awl:.1f}% types) — formal/academic register")
     elif mean_awl > 5:
