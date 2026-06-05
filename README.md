@@ -102,9 +102,19 @@ python corpus_ultra.py <corpus.csv> <text_col> [options]
 
 ## Benchmark Results
 
+Measured June 2026. Full pipeline (statistics + collocations + dispersion + readability + POS).
+
+| Dataset | Docs | Full Pipeline Time |
+|---------|------|--------------------|
+| 20 Newsgroups (497 docs, 5 categories) | 497 | 21.8s |
+| IMDb Sentiment (99 docs) | 99 | 11.3s |
+| BBC News (298 docs, 5 categories) | 298 | 18.6s |
+| TripAdvisor HK | — | Fails on stats (edge case) |
+
+**Component-level timing:**
+
 | Task | Performance | Corpus |
 |------|-------------|--------|
-| Full pipeline (stats + collocations + dispersion + readability + POS) | **20.0s** | 2000 docs, mixed-length |
 | spaCy NLP (en_core_web_sm) | ~1000 docs/sec | Batch processing via nlp.pipe() |
 | Collocation extraction | <1s | PMI/LL/Dice for top bigrams |
 | Readability scores | <0.5s | 9 metrics per doc |
