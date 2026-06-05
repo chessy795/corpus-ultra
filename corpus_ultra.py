@@ -55,12 +55,23 @@ warnings.filterwarnings("ignore")
 WORD_RE = re.compile(r"[A-Za-z]{2,}")
 
 # --- Shared infrastructure (ultra_shared, optional) ---
+import sys as _sys
+_ultra_parent = str(Path(__file__).resolve().parent.parent)
+if _ultra_parent not in _sys.path:
+    _sys.path.insert(0, _ultra_parent)
+
 try:
     from ultra_shared.logging import setup_logging as _setup_logging
     from ultra_shared.config import load_config as _load_config
     HAS_ULTRA_SHARED = True
 except ImportError:
     HAS_ULTRA_SHARED = False
+
+try:
+    from ultra_shared.schema import build_manifest, new_doc, add_tool_section, write_docs_jsonl, write_manifest
+    HAS_SCHEMA = True
+except ImportError:
+    HAS_SCHEMA = False
 
 
 # ─── Optional imports with graceful fallback ───────────────────────────────────
@@ -4083,17 +4094,58 @@ Examples:
         if args.group: sections_run.append("group_comparison")
         if args.kwic_node: sections_run.append("comparative_concordance")
 
+    # Merge per-doc outputs from existing CSVs into JSONL
+    if HAS_SCHEMA:
+        std_docs = {}
+
+        # Try to load readability per-doc data
+        read_path = os.path.join(args.output, "readability.csv")
+        if os.path.exists(read_path):
+            read_df = pd.read_csv(read_path)
+            for _, row in read_df.iterrows():
+                doc_id = str(row.get("doc_id", row.name))
+                if doc_id not in std_docs:
+                    std_docs[doc_id] = new_doc(doc_id, "")
+                add_tool_section(std_docs[doc_id], "readability", {
+                    col: float(row[col]) for col in read_df.columns
+                    if col not in ("doc_id", "group") and pd.notna(row[col])
+                })
+
+        # Try to load lexical richness per-doc data
+        lex_path = os.path.join(args.output, "lexical_richness.csv")
+        if os.path.exists(lex_path):
+            lex_df = pd.read_csv(lex_path)
+            for _, row in lex_df.iterrows():
+                doc_id = str(row.get("doc_id", row.name))
+                if doc_id not in std_docs:
+                    std_docs[doc_id] = new_doc(doc_id, "")
+                add_tool_section(std_docs[doc_id], "lexical_richness", {
+                    col: float(row[col]) for col in lex_df.columns
+                    if col not in ("doc_id", "group") and pd.notna(row[col])
+                })
+
+        if std_docs:
+            write_docs_jsonl(list(std_docs.values()), args.output)
+
     # Runtime manifest
     elapsed = time.time() - _t_start
-    manifest = {
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "n_docs": len(df),
-        "elapsed_sec": round(elapsed, 2),
-        "sections_run": sections_run,
-    }
-    manifest_path = os.path.join(args.output, "manifest.json")
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
+    if HAS_SCHEMA:
+        m = build_manifest(
+            "corpus_ultra", len(df), elapsed,
+            input_file=str(args.corpus),
+            parameters={"sections_run": sections_run},
+        )
+        write_manifest(m, args.output)
+    else:
+        manifest = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "n_docs": len(df),
+            "elapsed_sec": round(elapsed, 2),
+            "sections_run": sections_run,
+        }
+        manifest_path = os.path.join(args.output, "manifest.json")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
 
     # Generate index.html (Fix 5)
     generate_index_html(args.output)
