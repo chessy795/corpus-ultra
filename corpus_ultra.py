@@ -4200,6 +4200,57 @@ Examples:
             freq_df = pd.DataFrame(word_freq, columns=["word", "frequency"])
             rb.add_table(freq_df, title="Top 50 Most Frequent Words")
 
+            # --- Collocations table ---
+            coll_path = os.path.join(args.output, "collocations.csv")
+            if os.path.exists(coll_path):
+                coll_df = pd.read_csv(coll_path)
+                coll_display = [c for c in ["w1", "w2", "frequency", "pmi", "t_score", "log_likelihood", "dice"] if c in coll_df.columns]
+                if coll_display:
+                    rb.add_table(coll_df[coll_display].head(20), title="Top 20 Collocations")
+
+            # --- Biber dimensions chart ---
+            biber_path = os.path.join(args.output, "biber_dimensions.csv")
+            if os.path.exists(biber_path):
+                biber_df = pd.read_csv(biber_path)
+                if "dimension" in biber_df.columns and "score" in biber_df.columns:
+                    import plotly.express as px
+                    fig_biber = px.bar(
+                        x=biber_df["dimension"], y=biber_df["score"],
+                        labels={"x": "Dimension", "y": "Score"},
+                        title="Biber Dimensions",
+                        color=biber_df["score"],
+                        color_continuous_scale="RdBu_r"
+                    )
+                    fig_biber.update_layout(showlegend=False)
+                    rb.add_chart(fig_biber, title="Biber Dimensions")
+                    rb.add_table(biber_df, title="Biber Dimension Scores")
+
+            # --- POS distribution chart ---
+            pos_path = os.path.join(args.output, "pos_analysis.csv")
+            if os.path.exists(pos_path):
+                pos_df = pd.read_csv(pos_path)
+                # Get Biber-style POS features
+                biber_cols = ["private_verbs", "that_complement", "first_second_pronouns",
+                              "analytic_negation", "demonstrative_pronouns", "general_emphatics",
+                              "first_person_pronouns", "pronoun_it", "be_main_verb", "existential_there",
+                              "conjuncts", "indefinite_pronouns", "past_tense", "third_person_pronouns",
+                              "perfect_aspect", "time_adverbials", "place_adverbials", "adverbs",
+                              "infinitives", "conditional_subordination", "necessity_modals",
+                              "possibility_modals", "agentless_passives", "noun_phrases",
+                              "prepositions", "attributive_adjectives"]
+                available = [c for c in biber_cols if c in pos_df.columns]
+                if available:
+                    means = pos_df[available].mean().sort_values(ascending=False).head(15)
+                    import plotly.express as px
+                    fig_pos = px.bar(
+                        x=means.index, y=means.values,
+                        labels={"x": "POS Feature", "y": "Mean Frequency"},
+                        title="POS Feature Distribution (Top 15)",
+                        color_discrete_sequence=["#8b5cf6"]
+                    )
+                    fig_pos.update_layout(xaxis_tickangle=-45)
+                    rb.add_chart(fig_pos, title="POS Feature Distribution")
+
             rb.build(os.path.join(args.output, "report.html"))
             rb.build_csv(os.path.join(args.output, "raw_output.csv"))
         except Exception as e:
