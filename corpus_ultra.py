@@ -4193,6 +4193,13 @@ Examples:
                     summary2 = ldf[lex_cols].describe().round(4).reset_index()
                     rb.add_table(summary2, title="Lexical Richness Summary Statistics")
 
+            # --- Frequency list ---
+            from collections import Counter
+            all_words = " ".join(df["text"].astype(str)).lower().split()
+            word_freq = Counter(all_words).most_common(50)
+            freq_df = pd.DataFrame(word_freq, columns=["word", "frequency"])
+            rb.add_table(freq_df, title="Top 50 Most Frequent Words")
+
             rb.build(os.path.join(args.output, "report.html"))
             rb.build_csv(os.path.join(args.output, "raw_output.csv"))
         except Exception as e:
